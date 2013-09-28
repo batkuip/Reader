@@ -217,7 +217,7 @@
 			titleLabel.shadowOffset = CGSizeMake(0.0f, 1.0f);
 			titleLabel.adjustsFontSizeToFitWidth = YES;
 			titleLabel.minimumFontSize = 14.0f;
-			titleLabel.text = [object.fileName stringByDeletingPathExtension];
+			titleLabel.text = object.title;
 
 			[self addSubview:titleLabel]; 
 		}

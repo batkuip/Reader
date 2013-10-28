@@ -53,6 +53,8 @@
 	UIPrintInteractionController *printInteraction;
 
 	NSInteger currentPage;
+    
+    NSInteger currentScrollViewPage;
 
 	CGSize lastAppearSize;
 
@@ -64,6 +66,8 @@
 #pragma mark Constants
 
 #define PAGING_VIEWS 3
+
+#define STATUS_HEIGHT 20.0f
 
 #define TOOLBAR_HEIGHT 44.0f
 #define PAGEBAR_HEIGHT 48.0f
@@ -311,9 +315,17 @@
 
 	assert(document != nil); // Must have a valid ReaderDocument
 
-	self.view.backgroundColor = [UIColor scrollViewTexturedBackgroundColor];
+	self.view.backgroundColor = [UIColor grayColor]; // Neutral gray
 
 	CGRect viewRect = self.view.bounds; // View controller's view bounds
+
+	if ([self respondsToSelector:@selector(edgesForExtendedLayout)])
+	{
+		if ([self prefersStatusBarHidden] == NO) // Visible status bar
+		{
+			viewRect.origin.y += STATUS_HEIGHT;
+		}
+	}
 
 	theScrollView = [[UIScrollView alloc] initWithFrame:viewRect]; // All
 
@@ -426,9 +438,19 @@
 
 	theScrollView = nil; contentViews = nil; lastHideTime = nil;
 
-	lastAppearSize = CGSizeZero; currentPage = 0;
+	lastAppearSize = CGSizeZero; currentPage = 0; currentScrollViewPage = 0;
 
 	[super viewDidUnload];
+}
+
+- (BOOL)prefersStatusBarHidden
+{
+	return YES;
+}
+
+- (UIStatusBarStyle)preferredStatusBarStyle
+{
+	return UIStatusBarStyleLightContent;
 }
 
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
@@ -480,25 +502,37 @@
 
 #pragma mark UIScrollViewDelegate methods
 
-- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView
 {
-	__block NSInteger page = 0;
-
-	CGFloat contentOffsetX = scrollView.contentOffset.x;
-
-	[contentViews enumerateKeysAndObjectsUsingBlock: // Enumerate content views
-		^(id key, id object, BOOL *stop)
-		{
-			ReaderContentView *contentView = object;
-
-			if (contentView.frame.origin.x == contentOffsetX)
-			{
-				page = contentView.tag; *stop = YES;
-			}
-		}
-	];
-
-	if (page != 0) [self showDocumentPage:page]; // Show the page
+    NSInteger scrollViewPage = 0;
+    CGFloat pageWidth = scrollView.frame.size.width;
+    CGFloat contentOffsetX = scrollView.contentOffset.x;
+    
+    if ((currentScrollViewPage == 0 && contentOffsetX < pageWidth) || contentOffsetX <= 0) {
+        scrollViewPage = 0;
+    } else if ((currentScrollViewPage == 2 && contentOffsetX <= pageWidth) || (currentScrollViewPage != 2 && contentOffsetX < 2 * pageWidth)) {
+        scrollViewPage = 1;
+    } else {
+        scrollViewPage = 2;
+    }
+    
+    if (scrollViewPage != currentScrollViewPage) {
+        currentScrollViewPage = scrollViewPage;
+        
+        CGFloat contentOffsetX = scrollView.frame.size.width * scrollViewPage;
+        
+        __block NSInteger page = 0;
+        
+        [contentViews enumerateKeysAndObjectsUsingBlock:^(id key, ReaderContentView *contentView, BOOL *stop) {
+            if (contentView.frame.origin.x == contentOffsetX) {
+                page = contentView.tag; *stop = YES;
+            }
+        }];
+        
+        if (page != 0)  {
+            [self showDocumentPage:page]; // Show the page
+        }
+    }
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView
@@ -762,7 +796,7 @@
 	thumbsViewController.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
 	thumbsViewController.modalPresentationStyle = UIModalPresentationFullScreen;
 
-	[self presentModalViewController:thumbsViewController animated:NO];
+	[self presentViewController:thumbsViewController animated:NO completion:NULL];
 }
 
 - (void)tappedInToolbar:(ReaderMainToolbar *)toolbar printButton:(UIButton *)button
@@ -846,7 +880,7 @@
 
 			mailComposer.mailComposeDelegate = self; // Set the delegate
 
-			[self presentModalViewController:mailComposer animated:YES];
+			[self presentViewController:mailComposer animated:YES completion:NULL];
 		}
 	}
 
@@ -877,7 +911,7 @@
 		if ((result == MFMailComposeResultFailed) && (error != NULL)) NSLog(@"%@", error);
 	#endif
 
-	[self dismissModalViewControllerAnimated:YES]; // Dismiss
+	[self dismissViewControllerAnimated:YES completion:NULL]; // Dismiss
 }
 
 #pragma mark ThumbsViewControllerDelegate methods
@@ -886,7 +920,7 @@
 {
 	[self updateToolbarBookmarkIcon]; // Update bookmark icon
 
-	[self dismissModalViewControllerAnimated:NO]; // Dismiss
+	[self dismissViewControllerAnimated:YES completion:NULL]; // Dismiss
 }
 
 - (void)thumbsViewController:(ThumbsViewController *)viewController gotoPage:(NSInteger)page
